@@ -3,8 +3,11 @@ from db import get_db
 
 bp = Blueprint("auth", __name__)
 
-@bp.route("/login", methods=["POST"])
+@bp.route("/login", methods=["POST", "OPTIONS"])
 def login():
+    if request.method == "OPTIONS":
+        return jsonify({"status": "ok"}), 200
+
     data = request.get_json()
     username = data.get("username")
     password = data.get("password")

@@ -1,7 +1,5 @@
 # CSE108_lab8
 
-## 🚀 Running the Backend
-
 open two terminals: 
 
 terminal 1: 

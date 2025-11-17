@@ -19,3 +19,10 @@ terminal 2:
 cd frontend
 python3 -m http.server 5500
 ```
+
+INSERT INTO users (username, password, role) VALUES
+('sri','1234','student'),
+('hari','1234','admin'),
+('varsha','1234','student'),
+('mahika', '1234', 'admin'),
+('hepworth','1234','teacher');

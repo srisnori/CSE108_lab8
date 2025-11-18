@@ -1,86 +1,74 @@
 import sqlite3
-import os
+import random
+from pathlib import Path
 from flask import g
 
-DATABASE = "acme.db"
+DB_PATH = Path(__file__).parent / "acme.db"
+SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
 def get_db():
-    """Return a single DB connection per request."""
     if "db" not in g:
-        g.db = sqlite3.connect(
-            DATABASE, detect_types=sqlite3.PARSE_DECLTYPES
-        )
+        g.db = sqlite3.connect(DB_PATH)
         g.db.row_factory = sqlite3.Row
     return g.db
 
 def close_db(e=None):
-    """Close DB after request."""
     db = g.pop("db", None)
     if db is not None:
         db.close()
 
-def init_db(app):
-    """Create tables and insert starter demo data."""
-    if os.path.exists(DATABASE):
-        os.remove(DATABASE)
-        print(f"Removed existing {DATABASE}")
+def init_db(app=None):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
 
-    db = get_db()
+    # Load schema
+    with open(SCHEMA_PATH) as f:
+        cur.executescript(f.read())
 
-    # Load schema.sql
-    with app.open_resource("schema.sql") as f:
-        db.executescript(f.read().decode("utf-8"))
-
-    print("Database schema created successfully.")
-
-    # Sample teachers
-    teachers = [
-        (1, "Susan Walker"),
-        (2, "Ammon Hepworth"),
-        (3, "Ralph Jenkins"),
-        (4, "Dr. Emily Carter")
+    # Insert users
+    users = [
+        ("sri", "1234", "student"),
+        ("varsha", "1234", "student"),
+        ("hari", "1234", "admin"),
+        ("mahika", "1234", "student"),
+        ("hepworth", "1234", "teacher"),
+        ("mindy", "1234", "teacher"),
+        ("sam", "1234", "teacher"),
     ]
-    db.executemany(
-        "INSERT INTO teachers (teacher_id, teacher_name) VALUES (?, ?)",
-        teachers,
+    cur.executemany(
+        "INSERT OR IGNORE INTO users (username, password, role) VALUES (?, ?, ?)", users
     )
 
-    # Students
-    students = [
-        (1, "Varsha"),
-        (2, "Chuck"),
-        (3, "Mindy"),
-        (4, "David"),
-    ]
-    db.executemany(
-        "INSERT INTO students (student_id, student_name) VALUES (?, ?)",
-        students,
-    )
-
-    # Courses
+    # Insert courses
     courses = [
-        (101, "Physics 121", 1, "TR 11:00-11:50 AM", 10),
-        (102, "CS 106", 2, "MWF 2:00-2:50 PM", 10),
-        (103, "Math 101", 3, "MWF 10:00-10:50 AM", 8),
-        (104, "CS 162", 2, "TR 3:00-3:50 PM", 4),
-        (105, "Art History", 4, "MW 9:00-9:50 AM", 12),
+        ("CSE101", "Intro to CS", "mindy", "TBD", 5),
+        ("CSE162", "Data Structures", "mindy", "TBD", 5),
+        ("PHYS121", "Physics 121", "hepworth", "TR 11:00-11:50 AM", 5),
+        ("CS106", "Algorithms", "sam", "MWF 2:00-2:50 PM", 5),
+        ("MATH101", "Calculus", "hepworth", "MWF 10:00-10:50 AM", 5),
     ]
-    db.executemany(
-        "INSERT INTO courses (course_id, course_name, teacher_id, time, max_capacity) VALUES (?, ?, ?, ?, ?)",
-        courses,
+    cur.executemany(
+        "INSERT OR IGNORE INTO courses (code, name, instructor, time, capacity) VALUES (?, ?, ?, ?, ?)",
+        courses
     )
 
-    # Enrollments
-    enrollments = [
-        (1, 101), (2, 101), (3, 101), (4, 101),
-        (1, 102), (3, 102), (4, 102), (2, 102),
-        (2, 103), (3, 103),
-        (1, 104), (2, 104), (3, 104), (4, 104),
-    ]
-    db.executemany(
-        "INSERT INTO enrollments (student_id, course_id) VALUES (?, ?)",
-        enrollments,
-    )
+    # Random enrollments with numeric grades
+    cur.execute("SELECT id FROM users WHERE role='student'")
+    student_ids = [row["id"] for row in cur.fetchall()]
 
-    db.commit()
-    print("Sample data inserted.")
+    cur.execute("SELECT id FROM courses")
+    course_ids = [row["id"] for row in cur.fetchall()]
+
+    for student_id in student_ids:
+        for course_id in course_ids:
+            if random.random() < 0.5:  # 50% chance
+                grade = random.randint(50, 100)
+                cur.execute(
+                    "INSERT INTO enrollments (student_id, course_id, grade) VALUES (?, ?, ?)",
+                    (student_id, course_id, grade)
+                )
+
+    conn.commit()
+    conn.close()
+    print("Database initialized with users, courses, and enrollments.")

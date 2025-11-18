@@ -1,16 +1,30 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify, request
 from db import get_db
 
 bp = Blueprint("teacher", __name__)
 
-@bp.route("/teacher/courses/<int:teacher_id>", methods=["GET"])
-def teacher_courses(teacher_id):
+@bp.route("/teacher/courses/<string:username>", methods=["GET"])
+def teacher_courses(username):
     db = get_db()
     cur = db.cursor()
-    cur.execute("SELECT * FROM courses WHERE teacher_id=?", (teacher_id,))
-    return jsonify([dict(row) for row in cur.fetchall()])
+    cur.execute("""
+        SELECT 
+            c.id AS course_id,
+            c.name AS course_name,
+            c.time,
+            c.capacity,
+            (SELECT COUNT(*) FROM enrollments e WHERE e.course_id=c.id) AS enrolled
+        FROM courses c
+        WHERE c.instructor = ?
+    """, (username,))
+    
+    courses = [dict(row) for row in cur.fetchall()]
+    return jsonify(courses)
 
-@bp.route("/teacher/course/<int:course_id>", methods=["GET"])
+
+
+# Get all students in a course
+@bp.route("/teacher/course/<int:course_id>/students", methods=["GET"])
 def course_students(course_id):
     db = get_db()
     cur = db.cursor()
@@ -22,15 +36,19 @@ def course_students(course_id):
     """, (course_id,))
     return jsonify([dict(row) for row in cur.fetchall()])
 
+
+# Update grade for a student
 @bp.route("/teacher/grade", methods=["POST"])
 def update_grade():
     data = request.get_json()
     enrollment_id = data["enrollment_id"]
-    grade = data["grade"]
+    new_grade = int(data["grade"])  # ensure it's numeric
 
     db = get_db()
     cur = db.cursor()
-    cur.execute("UPDATE enrollments SET grade=? WHERE id=?", (grade, enrollment_id))
+
+    # Overwrite with new numeric grade
+    cur.execute("UPDATE enrollments SET grade=? WHERE id=?", (new_grade, enrollment_id))
     db.commit()
 
     return jsonify({"status": "ok"})

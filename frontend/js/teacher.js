@@ -18,10 +18,11 @@ async function loadTeacherCourses() {
 
   $("welcome").textContent = `Welcome Dr. ${user.username}!`;
 
-  const teacherId = user.id;
+  // Use instructor name instead of ID
+  const teacherName = user.username;
 
-  // Fetch this teacher’s courses
-  const courses = await api(`/teacher/courses/${teacherId}`);
+  // Fetch courses
+  const courses = await api(`/teacher/courses/${teacherName}`);
 
   const div = $("courses");
   div.innerHTML = `
@@ -33,7 +34,6 @@ async function loadTeacherCourses() {
       </tr>
     </table>
   `;
-
   const table = div.querySelector("table");
 
   courses.forEach(c => {
@@ -41,15 +41,13 @@ async function loadTeacherCourses() {
       <tr onclick="loadStudents(${c.course_id}, '${c.course_name}')">
         <td class="clickable">${c.course_name}</td>
         <td>${c.time}</td>
-        <td>${c.enrolled}/${c.capacity}</td>
+        <td>${c.enrolled || 0}/${c.capacity || 50}</td>
       </tr>
     `;
   });
 }
 
-
-
-// Load students for selected course
+// Load students in a course
 async function loadStudents(courseId, courseName) {
   const students = await api(`/teacher/course/${courseId}/students`);
 
@@ -59,7 +57,7 @@ async function loadStudents(courseId, courseName) {
     <table class="course-table">
       <tr>
         <th>Student</th>
-        <th>Grade</th>
+        <th>Grade (0-100)</th>
         <th>Update</th>
       </tr>
     </table>
@@ -71,7 +69,7 @@ async function loadStudents(courseId, courseName) {
     table.innerHTML += `
       <tr>
         <td>${s.username}</td>
-        <td><input id="g-${s.enrollment_id}" value="${s.grade || ""}"></td>
+        <td><input id="g-${s.enrollment_id}" value="${s.grade || ''}"></td>
         <td>
           <button onclick="updateGrade(${s.enrollment_id})">Save</button>
         </td>
@@ -80,23 +78,41 @@ async function loadStudents(courseId, courseName) {
   });
 }
 
-
-
 async function updateGrade(enrollmentId) {
-  const grade = $("g-" + enrollmentId).value;
+  // Get the input value and convert to a number
+  const gradeInput = $("g-" + enrollmentId);
+  const grade = Number(gradeInput.value);
 
-  await fetch(API_BASE + "/teacher/grade", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({
-      enrollment_id: enrollmentId,
-      grade: grade
-    })
-  });
+  if (isNaN(grade) || grade < 0 || grade > 100) {
+    alert("Please enter a valid number between 0 and 100.");
+    return;
+  }
 
-  alert("Grade updated!");
+  try {
+    const res = await fetch(API_BASE + "/teacher/grade", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        enrollment_id: enrollmentId,
+        grade: grade
+      })
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      alert(`Grade updated to ${grade}!`);
+      // Optionally reload students to reflect the change
+      const courseRow = gradeInput.closest("tr");
+      // gradeInput.value = data.grade; // optional refresh
+    } else {
+      alert(`Error updating grade: ${data.error || "Unknown error"}`);
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Failed to update grade. See console for details.");
+  }
 }
-
 
 // Init
 document.addEventListener("DOMContentLoaded", () => {
@@ -106,16 +122,12 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  // SET TEACHER ID
-  window.TEACHER_ID = user.id;
   $("welcome").textContent = `Welcome Dr. ${user.username}!`;
 
-  // SIGN OUT
   $("logoutBtn").onclick = () => {
     localStorage.removeItem("user");
     window.location.href = "/index.html";
   };
 
-  // Load courses
   loadTeacherCourses();
 });

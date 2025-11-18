@@ -19,7 +19,6 @@ async function api(endpoint, method="GET", body=null) {
       headers: { "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : null
     });
-
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Request failed");
     return data;
@@ -30,6 +29,7 @@ async function api(endpoint, method="GET", body=null) {
   }
 }
 
+// Fetch data
 function fetchMyCourses() {
   return api(`/student/courses/my/${window.STUDENT_ID}`);
 }
@@ -62,22 +62,24 @@ async function unenrollCourse(courseId) {
   }
 }
 
+// Render tables
 function renderMyCoursesTable(courses) {
   const body = $("myCoursesTableBody");
   body.innerHTML = "";
 
   if (!courses || courses.length === 0) {
-    body.innerHTML = `<tr><td colspan="4" class="empty">You are not currently enrolled in any classes.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="5" class="empty">You are not currently enrolled in any classes.</td></tr>`;
     return;
   }
 
   courses.forEach(c => {
     body.innerHTML += `
       <tr>
-        <td>${c.course_name}</td>
-        <td>${c.teacher_name}</td>
+        <td>${c.name}</td>
+        <td>${c.instructor}</td>
         <td>${c.time}</td>
-        <td><button onclick="unenrollCourse(${c.course_id})">Drop</button></td>
+        <td>${c.enrollment_display}</td> <!-- enrolled/capacity -->
+        <td><button onclick="unenrollCourse(${c.id})">Drop</button></td>
       </tr>
     `;
   });
@@ -87,23 +89,23 @@ function renderAllCoursesTable(allCourses, myCourses) {
   const body = $("allCoursesTableBody");
   body.innerHTML = "";
 
-  const mySet = new Set(myCourses.map(x => x.course_id));
+  const mySet = new Set(myCourses.map(x => x.id));
 
   allCourses.forEach(c => {
-    const enrolled = mySet.has(c.course_id);
+    const enrolled = mySet.has(c.id);
     const full = !!c.is_full;
 
     let action = "";
     if (enrolled) action = `<span class="enrolled-text">Enrolled</span>`;
     else if (full) action = `<span class="full-text">Full</span>`;
-    else action = `<button onclick="enrollCourse(${c.course_id})">Add</button>`;
+    else action = `<button onclick="enrollCourse(${c.id})">Add</button>`;
 
     body.innerHTML += `
       <tr>
-        <td>${c.course_name}</td>
-        <td>${c.teacher_name}</td>
+        <td>${c.name}</td>
+        <td>${c.instructor}</td>
         <td>${c.time}</td>
-        <td>${c.enrollment_display}</td>
+        <td>${c.enrollment_display}</td> <!-- enrolled/capacity -->
         <td>${action}</td>
       </tr>
     `;
@@ -120,6 +122,7 @@ async function renderContent() {
   updateTabs();
 }
 
+// Tabs
 function updateTabs() {
   if (currentTab === "myCourses") {
     $("myCoursesContent").classList.remove("hidden");
@@ -135,6 +138,7 @@ function switchTab(tab) {
   updateTabs();
 }
 
+// Init
 document.addEventListener("DOMContentLoaded", () => {
   const user = JSON.parse(localStorage.getItem("user"));
   if (!user) {

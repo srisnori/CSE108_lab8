@@ -1,189 +1,95 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify, request
 from db import get_db
 
-# Create a Blueprint named 'student'
 bp = Blueprint("student", __name__)
-
-# --- Helper Function for Database Querying ---
-
-def query_db(query, args=(), one=False):
-    """
-    Executes a database query.
-    """
-    db = get_db()
-    cur = db.execute(query, args)
-    rv = cur.fetchall()
-    cur.close()
-    return (rv[0] if rv else None) if one else rv
-
-# --- Student API Routes ---
-
-@bp.route("/student/courses/available", methods=["GET"])
-def get_available_courses():
-    """
-    GET /api/student/courses/available
-    Retrieves all courses offered, including teacher name, time, and enrollment count.
-    Used for the 'Add Courses' tab.
-    """
-    query = """
-    SELECT
-        c.id AS course_id,
-        c.course_name,
-        c.time,
-        c.capacity,
-        t.username AS teacher_name,
-        COUNT(e.student_id) AS enrolled_count
-    FROM courses c
-    JOIN users t ON c.teacher_id = t.id
-    LEFT JOIN enrollment e ON c.id = e.course_id
-    GROUP BY c.id, c.course_name, c.time, c.capacity, t.username
-    ORDER BY c.course_name;
-    """
-
-    courses = query_db(query)
-
-    # Format the results for the frontend display
-    formatted_courses = []
-    for course in courses:
-        formatted_courses.append({
-            "course_id": course["course_id"],
-            "course_name": course["course_name"],
-            "teacher_name": course["teacher_name"],
-            "time": course["time"],
-            "capacity": course["capacity"],
-            "enrolled_count": course["enrolled_count"],
-            "enrollment_display": f"{course['enrolled_count']}/{course['capacity']}", 
-            "is_full": course["enrolled_count"] >= course["capacity"]
-        })
-
-    return jsonify(formatted_courses)
-
 
 @bp.route("/student/courses/my/<int:student_id>", methods=["GET"])
 def get_my_courses(student_id):
-    """
-    GET /api/student/courses/my/<student_id>
-    Retrieves all classes the specific student is currently enrolled in.
-    Used for the 'Your Courses' tab.
-    """
-    query = """
-    SELECT
-        c.id AS course_id,
-        c.course_name,
-        c.time,
-        c.capacity,
-        t.username AS teacher_name,
-        COUNT(e.student_id) AS enrolled_count
-    FROM courses c
-    JOIN users t ON c.teacher_id = t.id
-    LEFT JOIN enrollment e ON c.id = e.course_id
-    WHERE c.id IN (SELECT course_id FROM enrollment WHERE student_id = ?)
-    GROUP BY c.id, c.course_name, c.time, c.capacity, t.username
-    ORDER BY c.course_name;
-    """
-    courses = query_db(query, (student_id,))
+    db = get_db()
+    cur = db.cursor()
 
-    # Format the results
-    formatted_courses = []
-    for course in courses:
-        formatted_courses.append({
-            "course_id": course["course_id"],
-            "course_name": course["course_name"],
-            "teacher_name": course["teacher_name"],
-            "time": course["time"],
-            "enrollment_display": f"{course['enrolled_count']}/{course['capacity']}"
-        })
+    cur.execute("""
+        SELECT 
+            enrollments.course_id,
+            courses.course_name,
+            courses.time,
+            users.username AS teacher_name
+        FROM enrollments
+        JOIN courses ON enrollments.course_id = courses.id
+        JOIN users ON courses.teacher_id = users.id
+        WHERE enrollments.student_id = ?
+    """, (student_id,))
 
-    return jsonify(formatted_courses)
+    rows = [dict(row) for row in cur.fetchall()]
+    return jsonify(rows)
+
+
+@bp.route("/student/courses/available", methods=["GET"])
+def get_available_courses():
+    db = get_db()
+    cur = db.cursor()
+
+    cur.execute("""
+        SELECT 
+            courses.id AS course_id,
+            courses.course_name,
+            courses.time,
+            users.username AS teacher_name,
+            
+            (SELECT COUNT(*) FROM enrollments e WHERE e.course_id = courses.id) 
+                AS enrolled_count,
+                
+            courses.capacity,
+            
+            CASE WHEN (SELECT COUNT(*) FROM enrollments e2 WHERE e2.course_id = courses.id) 
+                        >= courses.capacity 
+                THEN 1 ELSE 0 END AS is_full
+            
+        FROM courses
+        JOIN users ON courses.teacher_id = users.id
+    """)
+
+    rows = []
+    for row in cur.fetchall():
+        row = dict(row)
+        row["enrollment_display"] = f"{row['enrolled_count']}/{row['capacity']}"
+        rows.append(row)
+
+    return jsonify(rows)
 
 
 @bp.route("/student/enroll", methods=["POST"])
-def enroll_in_course():
-    """
-    POST /api/student/enroll
-    Allows a student to enroll in a course, checking capacity first.
-    Expected JSON body: {"student_id": 1, "course_id": 101}
-    """
+def enroll():
     data = request.get_json()
-    student_id = data.get("student_id")
-    course_id = data.get("course_id")
-
-    if not all([student_id, course_id]):
-        return jsonify({"error": "Missing student_id or course_id"}), 400
+    student_id = data["student_id"]
+    course_id = data["course_id"]
 
     db = get_db()
-    try:
-        # 1. Check current enrollment and capacity
-        course_check = query_db("""
-            SELECT c.capacity, COUNT(e.student_id) AS enrolled_count
-            FROM courses c
-            LEFT JOIN enrollment e ON c.id = e.course_id
-            WHERE c.id = ?
-            GROUP BY c.id
-        """, (course_id,), one=True)
+    cur = db.cursor()
 
-        if course_check is None:
-            return jsonify({"error": "Course not found"}), 404
+    cur.execute("SELECT id FROM enrollments WHERE student_id=? AND course_id=?", 
+                (student_id, course_id))
+    if cur.fetchone():
+        return jsonify({"error": "Already enrolled"}), 400
 
-        capacity = course_check["capacity"]
-        enrolled = course_check["enrolled_count"]
+    cur.execute("INSERT INTO enrollments (student_id, course_id) VALUES (?, ?)",
+                (student_id, course_id))
+    db.commit()
 
-        if enrolled >= capacity:
-            return jsonify({"error": "Class is already full (reached capacity)"}), 409
-
-        # 2. Check if the student is already enrolled (prevent duplicates)
-        already_enrolled = query_db("""
-            SELECT 1 FROM enrollment WHERE student_id = ? AND course_id = ?
-        """, (student_id, course_id), one=True)
-
-        if already_enrolled:
-            return jsonify({"error": "Student is already enrolled in this class"}), 409
-
-        # 3. Enroll the student
-        db.execute(
-            "INSERT INTO enrollment (student_id, course_id) VALUES (?, ?)",
-            (student_id, course_id)
-        )
-        db.commit()
-
-        return jsonify({"message": "Successfully enrolled in the course"}), 200
-
-    except Exception as e:
-        db.rollback()
-        print(f"Enrollment Error: {e}")
-        return jsonify({"error": "An internal database error occurred during enrollment."}), 500
+    return jsonify({"message": "Successfully enrolled!"})
 
 
 @bp.route("/student/unenroll", methods=["POST"])
-def unenroll_from_course():
-    """
-    POST /api/student/unenroll
-    Allows a student to unenroll from a course.
-    Expected JSON body: {"student_id": 1, "course_id": 101}
-    """
+def unenroll():
     data = request.get_json()
-    student_id = data.get("student_id")
-    course_id = data.get("course_id")
-
-    if not all([student_id, course_id]):
-        return jsonify({"error": "Missing student_id or course_id"}), 400
+    student_id = data["student_id"]
+    course_id = data["course_id"]
 
     db = get_db()
-    try:
-        # Unenroll the student
-        cur = db.execute(
-            "DELETE FROM enrollment WHERE student_id = ? AND course_id = ?",
-            (student_id, course_id)
-        )
+    cur = db.cursor()
 
-        # Check if any row was actually deleted
-        if cur.rowcount == 0:
-             return jsonify({"error": "Student was not enrolled in this class"}), 404
+    cur.execute("DELETE FROM enrollments WHERE student_id=? AND course_id=?",
+                (student_id, course_id))
+    db.commit()
 
-        db.commit()
-        return jsonify({"message": "Successfully unenrolled from the course"}), 200
-
-    except Exception as e:
-        db.rollback()
-        print(f"Unenrollment Error: {e}")
-        return jsonify({"error": "An internal database error occurred during unenrollment."}), 500
+    return jsonify({"message": "Successfully dropped the course."})

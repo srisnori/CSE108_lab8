@@ -3,11 +3,8 @@ from db import get_db
 
 bp = Blueprint("auth", __name__)
 
-@bp.route("/login", methods=["POST", "OPTIONS"])
+@bp.route("/login", methods=["POST"])
 def login():
-    if request.method == "OPTIONS":
-        return jsonify({"status": "ok"}), 200
-
     data = request.get_json()
     username = data.get("username")
     password = data.get("password")
@@ -17,11 +14,11 @@ def login():
     cur.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password))
     user = cur.fetchone()
 
-    if user is None:
-        return jsonify({"error": "Invalid credentials"}), 401
+    if not user:
+        return jsonify({"error": "Invalid username or password"}), 401
 
     return jsonify({
         "id": user["id"],
         "username": user["username"],
-        "role": user["role"],
+        "role": user["role"]
     })

@@ -22,5 +22,7 @@ python3 -m http.server 5500
 | sri       | 1234     | student  |
 | varsha    | 1234     | student  |
 | hari      | 1234     | admin    |
-| mahika    | 1234     | admin    |
+| mahika    | 1234     | student  |
 | hepworth  | 1234     | teacher  |
+| mindy     | 1234     | teacher  |
+| sam       | 1234     | teacher  |

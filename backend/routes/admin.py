@@ -16,7 +16,12 @@ def update_user(role, user_id):
     db = get_db()
     data = request.get_json()
     name = data.get("name")
-    db.execute("UPDATE users SET username=? WHERE id=? AND role=?", (name, user_id, role))
+    new_role = data.get("role")  # << get new role
+
+    db.execute(
+        "UPDATE users SET username=?, role=? WHERE id=?",
+        (name, new_role, user_id)
+    )
     db.commit()
     return jsonify({"success": True})
 
@@ -46,6 +51,60 @@ def get_courses():
     courses = [dict(row) for row in cur.fetchall()]
     return jsonify(courses)
 
+import random
+import string
+
+def random_code(length=6):
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
+
+@admin_bp.route("/courses", methods=["POST"])
+def create_course():
+    db = get_db()
+    data = request.get_json()
+    
+    course_name = data.get("course_name")
+    teacher_id = data.get("teacher_id")
+    time = data.get("time")
+    max_capacity = data.get("max_capacity", 0)
+    code = data.get("code") or random_code()  # generate a code if not provided
+
+    if not course_name:
+        return jsonify({"error":"Course name required"}), 400
+
+    db.execute(
+        "INSERT INTO courses (name, code, instructor, time, capacity) VALUES (?, ?, ?, ?, ?)",
+        (course_name, code, teacher_id, time, max_capacity)
+    )
+    db.commit()
+    return jsonify({"success": True})
+
+@admin_bp.route("/courses/<int:course_id>", methods=["PUT"])
+def update_course(course_id):
+    db = get_db()
+    data = request.get_json()
+    
+    course_name = data.get("course_name")  # match JS
+    teacher_id = data.get("teacher_id")    # match JS
+    time = data.get("time")
+    max_capacity = data.get("max_capacity", 0)
+
+    if not course_name:                     # sanity check
+        return jsonify({"error": "Course name is required"}), 400
+
+    db.execute(
+        "UPDATE courses SET name=?, instructor=?, time=?, capacity=? WHERE id=?",
+        (course_name, teacher_id, time, max_capacity, course_id)
+    )
+    db.commit()
+    return jsonify({"success": True})
+
+@admin_bp.route("/courses/<int:course_id>", methods=["DELETE"])
+def delete_course(course_id):
+    db = get_db()
+    db.execute("DELETE FROM courses WHERE id=?", (course_id,))
+    db.commit()
+    return jsonify({"success": True})
+
 
 @admin_bp.route("/enrollments", methods=["GET"])
 def get_enrollments():
@@ -59,3 +118,31 @@ def get_enrollments():
     """)
     enrollments = [dict(row) for row in cur.fetchall()]
     return jsonify(enrollments)
+
+# Add enrollment
+@admin_bp.route("/enrollments", methods=["POST"])
+def create_enrollment():
+    db = get_db()
+    data = request.get_json()
+    student_id = data.get("student_id")
+    course_id = data.get("course_id")
+    if not student_id or not course_id:
+        return jsonify({"error": "Student ID and Course ID required"}), 400
+
+    db.execute(
+        "INSERT INTO enrollments (student_id, course_id) VALUES (?, ?)",
+        (student_id, course_id)
+    )
+    db.commit()
+    return jsonify({"success": True})
+
+# Delete enrollment
+@admin_bp.route("/enrollments/<int:student_id>/<int:course_id>", methods=["DELETE"])
+def delete_enrollment(student_id, course_id):
+    db = get_db()
+    db.execute(
+        "DELETE FROM enrollments WHERE student_id=? AND course_id=?",
+        (student_id, course_id)
+    )
+    db.commit()
+    return jsonify({"success": True})

@@ -16,11 +16,14 @@ function showMessage(type, msg){
 
 async function api(endpoint, method="GET", body=null){
   try {
-    const res = await fetch(API_ROOT + endpoint, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: body ? JSON.stringify(body) : null
-    });
+    const options = { method, headers: { "Content-Type": "application/json" } };
+
+    const token = localStorage.getItem("admin_token");
+    if (token) options.headers["Authorization"] = `Bearer ${token}`;
+
+    if (body) options.body = JSON.stringify(body);
+
+    const res = await fetch(API_ROOT + endpoint, options);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || data.message || "Request failed");
     return data;
@@ -35,10 +38,10 @@ async function api(endpoint, method="GET", body=null){
 
 document.addEventListener("DOMContentLoaded", () => {
   loadAll();
-  // optional: signout link
   const logoutBtn = $("logoutBtn");
   if (logoutBtn) logoutBtn.addEventListener("click", ()=> {
     localStorage.removeItem("user");
+    localStorage.removeItem("admin_token");
     window.location.href = "/index.html";
   });
 });
@@ -47,9 +50,9 @@ async function loadAll(){
   await Promise.all([ loadUsers(), loadCourses(), loadEnrollments() ]);
 }
 
-/* ----------------- USERS (teachers + students) ----------------- */
+/* ----------------- USERS ----------------- */
 
-let editingUser = null; // {role, id}
+let editingUser = null;
 
 async function loadUsers(){
   const data = await api("/users");
@@ -101,15 +104,21 @@ async function submitUser(){
   if (!name) return showMessage("error", "Name required");
 
   if (editingUser){
-    // update
-    const res = await api(`/users/${editingUser.role}/${editingUser.id}`, "PUT", { name });
-    if (res) {
+    // UPDATE user (corrected)
+    const res = await api(`/users/${editingUser.role}/${editingUser.id}`, "PUT", {
+      name,
+      role
+    });
+
+
+    if (res){
       showMessage("success", "User updated");
       closeUserModal();
       loadUsers();
     }
+
   } else {
-    // create
+    // CREATE user
     const res = await api("/users", "POST", { name, role });
     if (res){
       showMessage("success", "User added");
@@ -147,11 +156,11 @@ async function loadCourses(){
       <tr>
         <td>${c.course_id}</td>
         <td>${escapeHtml(c.course_name)}</td>
-        <td>${c.teacher_id ?? ""}</td>
+        <td>${escapeHtml(c.teacher_id ?? "")}</td>
         <td>${escapeHtml(c.time)}</td>
         <td>${c.max_capacity}</td>
         <td>
-          <button class="btn" onclick="openEditCourseModal(${c.course_id}, '${escapeHtml(c.course_name)}', ${c.teacher_id || 0}, '${escapeHtml(c.time)}', ${c.max_capacity})">Edit</button>
+          <button class="btn" onclick="openEditCourseModal(${c.course_id}, '${escapeHtml(c.course_name)}', '${escapeHtml(c.teacher_id ?? "")}', '${escapeHtml(c.time)}', ${c.max_capacity})">Edit</button>
           <button class="btn btn-danger" onclick="deleteCourse(${c.course_id})">Delete</button>
         </td>
       </tr>
@@ -169,39 +178,70 @@ function openCourseModal(){
   $("courseModal").classList.remove("hidden");
 }
 
-function openEditCourseModal(id, name, teacher_id, time, capacity){
+function openEditCourseModal(id, name, teacher, time, capacity){
   editingCourse = id;
   $("courseModalTitle").textContent = "Edit Course";
   $("course-name").value = unescapeHtml(name);
-  $("course-teacher").value = teacher_id || "";
+  $("course-teacher").value = unescapeHtml(teacher);
   $("course-time").value = unescapeHtml(time);
   $("course-capacity").value = capacity || 10;
   $("courseModal").classList.remove("hidden");
 }
 
-function closeCourseModal(){ $("courseModal").classList.add("hidden"); editingCourse = null; }
+function closeCourseModal(){
+  $("courseModal").classList.add("hidden");
+  editingCourse = null;
+}
 
 async function submitCourse(){
   const name = $("course-name").value.trim();
-  const teacher_id = parseInt($("course-teacher").value) || null;
+  const teacher = $("course-teacher").value.trim() || null;
   const time = $("course-time").value.trim();
   const max_capacity = parseInt($("course-capacity").value) || 0;
 
-  if (!name) return showMessage("error", "Course name required");
+  if(!name) return showMessage("error", "Course name required");
 
-  if (editingCourse){
-    const res = await api(`/courses/${editingCourse}`, "PUT", { course_name: name, teacher_id, time, max_capacity });
-    if (res){ showMessage("success", "Course updated"); closeCourseModal(); loadCourses(); }
+  const payload = {
+    course_name: name,
+    teacher_id: teacher,
+    time: time,
+    max_capacity: max_capacity
+  };
+
+  if(editingCourse){
+    // UPDATE course
+    const res = await api(`/courses/${editingCourse}`, "PUT", payload);
+    if(res){
+      showMessage("success","Course updated");
+      closeCourseModal();
+      loadCourses();
+    }
   } else {
-    const res = await api("/courses", "POST", { course_name: name, teacher_id, time, max_capacity });
-    if (res){ showMessage("success", "Course added"); closeCourseModal(); loadCourses(); }
+    // CREATE course
+    const res = await api("/courses", "POST", payload);
+    if(res){
+      showMessage("success","Course added");
+      closeCourseModal();
+      loadCourses();
+    }
   }
 }
 
-async function deleteCourse(id){
+async function deleteCourse(course_id){
   if (!confirm("Delete this course?")) return;
-  const res = await api(`/courses/${id}`, "DELETE");
-  if (res){ showMessage("success", "Deleted"); loadCourses(); loadEnrollments(); }
+
+  try {
+    const res = await api(`/courses/${course_id}`, "DELETE");
+    if (res && res.success) {
+      showMessage("success", "Course deleted");
+      loadCourses(); // refresh the table
+    } else {
+      showMessage("error", res?.error || "Failed to delete course");
+    }
+  } catch(err) {
+    console.error(err);
+    showMessage("error", "Failed to delete course");
+  }
 }
 
 /* ----------------- ENROLLMENTS ----------------- */
@@ -255,13 +295,22 @@ async function deleteEnrollment(student_id, course_id){
   if (res){ showMessage("success", "Removed"); loadEnrollments(); loadCourses(); }
 }
 
-/* ----------------- small helpers ----------------- */
+/* ----------------- helpers ----------------- */
 
 function escapeHtml(s){
   if (!s) return "";
-  return (""+s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  return (""+s)
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;");
 }
+
 function unescapeHtml(s){
   if (!s) return "";
-  return (""+s).replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&amp;/g,"&").replace(/&quot;/g,'"');
+  return (""+s)
+    .replace(/&lt;/g,"<")
+    .replace(/&gt;/g,">")
+    .replace(/&amp;/g,"&")
+    .replace(/&quot;/g,'"');
 }

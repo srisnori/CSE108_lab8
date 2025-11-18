@@ -4,7 +4,7 @@ from flask_cors import CORS
 
 from db import init_db, close_db
 from routes import auth, student, teacher
-from admin import admin_bp  # <-- USE THE BLUEPRINT VERSION
+from routes.admin import admin_bp
 
 def create_app(test_config=None):
     app = Flask(__name__, static_folder="../frontend/pages")
@@ -44,7 +44,7 @@ def create_app(test_config=None):
     app.register_blueprint(teacher.bp, url_prefix="/api")
 
     # Register admin blueprint
-    app.register_blueprint(admin_bp, url_prefix="/admin")
+    app.register_blueprint(admin_bp, url_prefix="/api/admin")
 
     # Default route
     @app.route("/")

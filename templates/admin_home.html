@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Dashboard</title>
+    <style>
+        table, th, td {
+            border: 1px solid black;
+            border-collapse: collapse;
+            padding: 6px;
+        }
+        table {
+            margin-bottom: 25px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>ACME Admin Dashboard</h1>
+
+<h2>Teachers</h2>
+<table>
+    <tr><th>ID</th><th>Name</th></tr>
+    {% for t in teachers %}
+    <tr>
+        <td>{{ t["teacher_id"] }}</td>
+        <td>{{ t["teacher_name"] }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+<h2>Students</h2>
+<table>
+    <tr><th>ID</th><th>Name</th></tr>
+    {% for s in students %}
+    <tr>
+        <td>{{ s["student_id"] }}</td>
+        <td>{{ s["student_name"] }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+<h2>Courses</h2>
+<table>
+    <tr>
+        <th>ID</th><th>Name</th><th>Teacher</th><th>Time</th><th>Capacity</th>
+    </tr>
+    {% for c in courses %}
+    <tr>
+        <td>{{ c["course_id"] }}</td>
+        <td>{{ c["course_name"] }}</td>
+        <td>{{ c["teacher_id"] }}</td>
+        <td>{{ c["time"] }}</td>
+        <td>{{ c["max_capacity"] }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+<h2>Enrollments</h2>
+<table>
+    <tr><th>Student ID</th><th>Course ID</th></tr>
+    {% for e in enrollments %}
+    <tr>
+        <td>{{ e["student_id"] }}</td>
+        <td>{{ e["course_id"] }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+</body>
+</html>

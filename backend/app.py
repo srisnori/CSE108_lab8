@@ -3,6 +3,7 @@ from flask import Flask, send_from_directory
 from flask_cors import CORS
 from db import init_db, close_db 
 from routes import auth, student, teacher
+from routes.admin import init_admin
 
 def create_app(test_config=None):
     app = Flask(__name__, static_folder="frontend/pages")
@@ -46,7 +47,10 @@ def create_app(test_config=None):
 
     return app
 
+app = Flask(__name__)
 app = create_app()
+init_admin(app)
+
 
 if __name__ == "__main__":
     app.run(debug=True)

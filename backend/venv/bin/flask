@@ -1,6 +1,4 @@
-#!/bin/sh
-'''exec' "/Users/varsha/Library/Mobile Documents/com~apple~CloudDocs/OneDrive/cse108/CSE108_lab8/backend/venv/bin/python3" "$0" "$@"
-' '''
+#!/Users/srinori/lab08/backend/venv/bin/python3.14
 import sys
 from flask.cli import main
 if __name__ == '__main__':

@@ -16,7 +16,8 @@ function login() {
 
       if (data.role === "student") {
         window.location.href = "pages/student.html";
-      } else if (data.role === "teacher") {
+      } 
+      else if (data.role === "teacher") {
         window.location.href = "pages/teacher.html";
       }
       else if (data.role === "admin") {

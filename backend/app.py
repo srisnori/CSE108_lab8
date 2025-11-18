@@ -1,21 +1,23 @@
 import os
 from flask import Flask, send_from_directory
 from flask_cors import CORS
-from db import init_db, close_db 
+
+from db import init_db, close_db
 from routes import auth, student, teacher
+from admin import admin_bp
 
 def create_app(test_config=None):
-    app = Flask(__name__, static_folder="frontend/pages")
+    app = Flask(__name__, static_folder="../frontend/pages")
 
     app.config.from_mapping(
         SECRET_KEY="dev_secret_key",
         DATABASE="acme.db",
     )
 
-    if test_config is None:
-        app.config.from_pyfile("config.py", silent=True)
-    else:
+    if test_config:
         app.config.from_mapping(test_config)
+    else:
+        app.config.from_pyfile("config.py", silent=True)
 
     try:
         os.makedirs(app.instance_path)
@@ -36,6 +38,9 @@ def create_app(test_config=None):
     app.register_blueprint(student.bp, url_prefix="/api")
     app.register_blueprint(teacher.bp, url_prefix="/api")
 
+    # ADMIN PAGE
+    app.register_blueprint(admin_bp, url_prefix="/admin")
+
     @app.route("/")
     def index():
         return app.send_static_file("student.html")
@@ -50,3 +55,4 @@ app = create_app()
 
 if __name__ == "__main__":
     app.run(debug=True)
+
